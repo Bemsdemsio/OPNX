@@ -513,6 +513,27 @@ export default function Trade() {
         addToast(`TP/SL configured for Position #${newPositionId}! ✓`, "success");
       }
 
+      // INSTANT VOLUME RECORDING: Write to localStorage volume cache immediately
+      try {
+        const storageKey = `opnx_volume_events_${account}`;
+        const cachedVolEvents = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        const key = `${receipt.blockNumber || 0}_${receipt.hash || tx.hash}_${Date.now()}`;
+        
+        cachedVolEvents.push({
+          key,
+          blockNumber: receipt.blockNumber || 0,
+          transactionHash: receipt.hash || tx.hash,
+          logIndex: Date.now(),
+          size: parseFloat(size),
+          timestamp: Math.floor(Date.now() / 1000)
+        });
+        
+        localStorage.setItem(storageKey, JSON.stringify(cachedVolEvents));
+        console.log("Cached new volume event successfully:", size);
+      } catch (volErr) {
+        console.error("Failed to instantly cache trade volume:", volErr);
+      }
+
       fetchData();
     } catch (e) {
       console.error(e);
