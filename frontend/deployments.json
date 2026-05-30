@@ -1,0 +1,10 @@
+{
+  "network": "OPN Testnet",
+  "chainId": 984,
+  "MockUSDC": "0xDd43A535F48d631151adE9340f5282B3cAB14eA8",
+  "MockPriceFeed": "0x2fE69002a1A89be40d2018213cf99F9f5e33B92B",
+  "LiquidityPool": "0x086824127E7fbe16E96A0F69dDDCADF8e7d6eb92",
+  "InsuranceFund": "0xaDfEc0483b9B46E9392cc4b4ed6113Af321Fc703",
+  "FundingRate": "0x62Bd049cBB8B929ee44231788e743CA06DcCF722",
+  "PerpEngine": "0xd67988008b7Ec7c9E7C090c0830a285315f7244e"
+}
