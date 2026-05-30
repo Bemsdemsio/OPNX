@@ -283,6 +283,9 @@ export default function Portfolio() {
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
+    // Clear any previous elements to avoid duplicates and canvas crash
+    chartContainerRef.current.innerHTML = '';
+
     chartRef.current = createChart(chartContainerRef.current, {
       layout: {
         background: { color: '#151515' },
@@ -433,7 +436,7 @@ export default function Portfolio() {
     if (uniqueData.length > 0) {
       currentSeriesRef.current.setData(uniqueData);
     }
-  }, [activeChartTab, equityHistory, pnlHistory, volumeHistory, totalEquity, realizedPnl]);
+  }, [activeChartTab, equityHistory, pnlHistory, volumeHistory, totalEquity, realizedPnl, totalVolume, activePositions, usdcBalance]);
 
   // Dynamic values
   const totalMargin = activePositions.reduce((acc, pos) => acc + pos.margin, 0);
