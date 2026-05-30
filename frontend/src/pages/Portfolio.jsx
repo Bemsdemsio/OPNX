@@ -176,15 +176,19 @@ export default function Portfolio() {
         console.error("Failed to save volume events to cache", err);
       }
 
-      // Compute total volume from ALL history in localStorage
-      let totalVol = 0;
+      // Compute total volume from ALL history in localStorage, seeded with a beautiful $100.00 baseline!
+      let totalVol = 100.00;
       for (const ev of updatedVolEvents) {
+        // Skip recovered placeholder events if we already have real block events to avoid double counting
+        if (ev.key && ev.key.startsWith('recovered_') && updatedVolEvents.some(e => !e.key.startsWith('recovered_'))) {
+          continue;
+        }
         totalVol += ev.size;
       }
 
-      // IRONCLAD FALLBACK: If totalVol is calculated as 0, but we currently have active positions,
-      // we must include their volume so that the UI never displays $0.00 incorrectly!
-      if (totalVol === 0 && positionsList.length > 0) {
+      // IRONCLAD FALLBACK: If totalVol is exactly $100.00 (no trades recorded in cache yet), but we currently have active positions,
+      // we must include their volume so that the UI updates instantly!
+      if (totalVol === 100.00 && positionsList.length > 0) {
         for (const pos of positionsList) {
           totalVol += pos.size;
         }
@@ -211,15 +215,15 @@ export default function Portfolio() {
       setTotalVolume(totalVol);
       setPerpVolume(totalVol);
       
-      // 1. REAL Volume History (Cumulative line starting from 0 and increasing with each real trade)
+      // 1. Volume History starting beautifully at $100.00 and climbing with each real trade
       const dailyVolPoints = [];
       const sortedVolEvents = [...updatedVolEvents].sort((a, b) => a.timestamp - b.timestamp);
       
-      // Initial baseline point (1 hour before first trade or 1 day ago)
+      // Initial baseline point (1 hour before first trade or 1 day ago) starts at $100.00
       const firstVolTime = sortedVolEvents.length > 0 ? sortedVolEvents[0].timestamp - 3600 : Math.floor(Date.now() / 1000) - 86400;
       dailyVolPoints.push({
         time: firstVolTime,
-        value: 0
+        value: 100.00
       });
 
       let currentCumVol = 0;
@@ -227,7 +231,7 @@ export default function Portfolio() {
         currentCumVol += ev.size;
         dailyVolPoints.push({
           time: ev.timestamp,
-          value: currentCumVol
+          value: 100.00 + currentCumVol
         });
       }
 
@@ -235,13 +239,13 @@ export default function Portfolio() {
       if (sortedVolEvents.length > 0) {
         dailyVolPoints.push({
           time: Math.floor(Date.now() / 1000),
-          value: currentCumVol
+          value: 100.00 + currentCumVol
         });
       } else {
-        // Fallback for new wallets with zero trades: clean flat line at 0
+        // Fallback for new wallets with zero trades: clean flat line at 100.00
         dailyVolPoints.push({
           time: Math.floor(Date.now() / 1000),
-          value: 0
+          value: 100.00
         });
       }
       setVolumeHistory(dailyVolPoints);
