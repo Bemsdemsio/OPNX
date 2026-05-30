@@ -119,55 +119,50 @@ export default function Portfolio() {
       const filterLiquidated = contracts.perpEngine.filters.PositionLiquidated(null, account);
       const eventsLiquidated = await contracts.perpEngine.queryFilter(filterLiquidated, startBlock, 'latest');
 
-      // Calculate total volume
-      let totalVol = 0;
-      const volChartPoints = [];
-      
+      // Calculate total volume using localStorage cache to support All-Time volume tracking
+      const storageKey = `opnx_volume_events_${account}`;
+      let cachedVolEvents = [];
+      try {
+        cachedVolEvents = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      } catch (err) {
+        console.error("Failed to parse cached volume events", err);
+      }
+
+      // Convert cached events to a map for quick lookup
+      const eventMap = new Map();
+      cachedVolEvents.forEach(e => {
+        const key = `${e.blockNumber}_${e.transactionHash}_${e.logIndex}`;
+        eventMap.set(key, e);
+      });
+
+      // Add new events to the map
       for (const event of eventsOpened) {
-        const size = parseFloat(ethers.formatUnits(event.args[3], 18));
-        totalVol += size;
-        
-        let timestamp = Math.floor(Date.now() / 1000);
-        try {
-          const block = await event.getBlock();
-          timestamp = block.timestamp;
-        } catch (e) {}
-        
-        volChartPoints.push({ time: timestamp, value: size });
+        const key = `${event.blockNumber}_${event.transactionHash}_${event.logIndex}`;
+        if (!eventMap.has(key)) {
+          const size = parseFloat(ethers.formatUnits(event.args[3], 18));
+          eventMap.set(key, {
+            key,
+            blockNumber: event.blockNumber,
+            transactionHash: event.transactionHash,
+            logIndex: event.logIndex,
+            size: size,
+            timestamp: Math.floor(Date.now() / 1000) // fallback timestamp
+          });
+        }
       }
 
-      // Calculate realized PnL & PnL chart points
-      let cumPnl = 0;
-      const pnlChartPoints = [];
-      const allClosed = [];
-      
-      for (const event of eventsClosed) {
-        const pnlVal = parseFloat(ethers.formatUnits(event.args[3], 18));
-        let timestamp = Math.floor(Date.now() / 1000);
-        try {
-          const block = await event.getBlock();
-          timestamp = block.timestamp;
-        } catch (e) {}
-        
-        allClosed.push({ timestamp, pnl: pnlVal });
-      }
-      
-      for (const event of eventsLiquidated) {
-        const pnlVal = parseFloat(ethers.formatUnits(event.args[4], 18));
-        let timestamp = Math.floor(Date.now() / 1000);
-        try {
-          const block = await event.getBlock();
-          timestamp = block.timestamp;
-        } catch (e) {}
-        
-        allClosed.push({ timestamp, pnl: pnlVal });
+      // Re-save all accumulated events to localStorage
+      const updatedVolEvents = Array.from(eventMap.values());
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(updatedVolEvents));
+      } catch (err) {
+        console.error("Failed to save volume events to cache", err);
       }
 
-      allClosed.sort((a, b) => a.timestamp - b.timestamp);
-      
-      for (const c of allClosed) {
-        cumPnl += c.pnl;
-        pnlChartPoints.push({ time: c.timestamp, value: cumPnl });
+      // Compute total volume from ALL history in localStorage
+      let totalVol = 0;
+      for (const ev of updatedVolEvents) {
+        totalVol += ev.size;
       }
 
       setRealizedPnl(cumPnl);
