@@ -179,39 +179,22 @@ export default function Portfolio() {
         console.error("Failed to save volume events to cache", err);
       }
 
-      // Compute total volume from ALL history in localStorage, seeded with a beautiful $100.00 baseline!
+      // Compute total volume: $100.00 base + all cached history + all currently active positions
       let totalVol = 100.00;
       for (const ev of updatedVolEvents) {
-        // Skip recovered placeholder events if we already have real block events to avoid double counting
         if (ev.key && ev.key.startsWith('recovered_') && updatedVolEvents.some(e => !e.key.startsWith('recovered_'))) {
           continue;
         }
         totalVol += ev.size;
       }
 
-      // IRONCLAD FALLBACK: If totalVol is exactly $100.00 (no trades recorded in cache yet), but we currently have active positions,
-      // we must include their volume so that the UI updates instantly!
-      if (totalVol === 100.00 && positionsList.length > 0) {
-        for (const pos of positionsList) {
+      // Always add current active positions to the active volume to ensure instant UI sync
+      for (const pos of positionsList) {
+        // Only add if it's not already counted in cachedVolEvents to avoid double counting
+        const key = `recovered_${pos.id}`;
+        if (!updatedVolEvents.some(ev => ev.key === key || ev.key === `recovered_${pos.id}_0` || ev.key === `recovered_${pos.id}_1` || ev.key === `recovered_${pos.id}_2` || ev.key === `recovered_${pos.id}_3` || ev.key === `recovered_${pos.id}_4` || ev.key === `recovered_${pos.id}_5` || ev.key === `recovered_${pos.id}_6` || ev.key === `recovered_${pos.id}_7` || ev.key === `recovered_${pos.id}_8` || ev.key === `recovered_${pos.id}_9` || ev.key === `recovered_${pos.id}_10` || ev.key === `recovered_${pos.id}_11` || ev.key === `recovered_${pos.id}_12` || ev.key === `recovered_${pos.id}_13` || ev.key === `recovered_${pos.id}_14` || ev.key === `recovered_${pos.id}_15` || ev.key === `recovered_${pos.id}_16` || ev.key === `recovered_${pos.id}_17` || ev.key === `recovered_${pos.id}_18` || ev.key === `recovered_${pos.id}_19` || ev.key === `recovered_${pos.id}_20`)) {
           totalVol += pos.size;
         }
-        
-        // Also seed the volume events cache so that the chart can draw this point immediately
-        positionsList.forEach((pos, index) => {
-          const key = `recovered_${pos.id}`;
-          if (!eventMap.has(key)) {
-            const mockEv = {
-              key,
-              blockNumber: 0,
-              transactionHash: `recovered_tx_${pos.id}`,
-              logIndex: index,
-              size: pos.size,
-              timestamp: Math.floor(Date.now() / 1000) - (positionsList.length - index) * 60
-            };
-            eventMap.set(key, mockEv);
-            updatedVolEvents.push(mockEv);
-          }
-        });
       }
 
       setRealizedPnl(cumPnl);
@@ -222,7 +205,22 @@ export default function Portfolio() {
       const dailyVolPoints = [];
       const sortedVolEvents = [...updatedVolEvents].sort((a, b) => a.timestamp - b.timestamp);
       
-      // Initial baseline point (1 hour before first trade or 1 day ago) starts at $100.00
+      // Always seed active positions into history points if they aren't there
+      positionsList.forEach((pos, index) => {
+        const key = `recovered_${pos.id}`;
+        if (!sortedVolEvents.some(ev => ev.key === key)) {
+          sortedVolEvents.push({
+            key,
+            size: pos.size,
+            timestamp: Math.floor(Date.now() / 1000)
+          });
+        }
+      });
+
+      // Sort again after adding active positions
+      sortedVolEvents.sort((a, b) => a.timestamp - b.timestamp);
+
+      // Initial baseline point starts at $100.00
       const firstVolTime = sortedVolEvents.length > 0 ? sortedVolEvents[0].timestamp - 3600 : Math.floor(Date.now() / 1000) - 86400;
       dailyVolPoints.push({
         time: firstVolTime,
