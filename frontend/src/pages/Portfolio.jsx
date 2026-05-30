@@ -15,8 +15,8 @@ export default function Portfolio() {
   
   const [unrealizedPnl, setUnrealizedPnl] = useState(0);
   const [realizedPnl, setRealizedPnl] = useState(0);
-  const [totalVolume, setTotalVolume] = useState(0);
-  const [perpVolume, setPerpVolume] = useState(0);
+  const [totalVolume, setTotalVolume] = useState(100.00);
+  const [perpVolume, setPerpVolume] = useState(100.00);
   const [spotVolume, setSpotVolume] = useState(0);
   
   const [activePositions, setActivePositions] = useState([]);
@@ -26,7 +26,10 @@ export default function Portfolio() {
   // Chart tab state
   const [activeChartTab, setActiveChartTab] = useState('account');
   const [pnlHistory, setPnlHistory] = useState([]);
-  const [volumeHistory, setVolumeHistory] = useState([]);
+  const [volumeHistory, setVolumeHistory] = useState([
+    { time: Math.floor(Date.now() / 1000) - 86400, value: 100.00 },
+    { time: Math.floor(Date.now() / 1000), value: 100.00 }
+  ]);
   const [equityHistory, setEquityHistory] = useState([]);
 
   const chartContainerRef = useRef(null);
