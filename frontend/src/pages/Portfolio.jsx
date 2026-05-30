@@ -5,7 +5,14 @@ import { createChart } from 'lightweight-charts';
 import { Landmark, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, RefreshCw, BarChart2, ShieldAlert } from 'lucide-react';
 
 export default function Portfolio() {
-  const { account, contracts, provider, addToast } = useWallet();
+  const { 
+    account, 
+    contracts, 
+    provider, 
+    addToast, 
+    globalVolume, 
+    globalVolumeHistory 
+  } = useWallet();
   
   // Dashboard overall states
   const [totalEquity, setTotalEquity] = useState(0);
@@ -15,8 +22,6 @@ export default function Portfolio() {
   
   const [unrealizedPnl, setUnrealizedPnl] = useState(0);
   const [realizedPnl, setRealizedPnl] = useState(0);
-  const [totalVolume, setTotalVolume] = useState(100.00);
-  const [perpVolume, setPerpVolume] = useState(100.00);
   const [spotVolume, setSpotVolume] = useState(0);
   
   const [activePositions, setActivePositions] = useState([]);
@@ -26,10 +31,6 @@ export default function Portfolio() {
   // Chart tab state
   const [activeChartTab, setActiveChartTab] = useState('account');
   const [pnlHistory, setPnlHistory] = useState([]);
-  const [volumeHistory, setVolumeHistory] = useState([
-    { time: Math.floor(Date.now() / 1000) - 86400, value: 100.00 },
-    { time: Math.floor(Date.now() / 1000), value: 100.00 }
-  ]);
   const [equityHistory, setEquityHistory] = useState([]);
 
   const chartContainerRef = useRef(null);
@@ -179,77 +180,7 @@ export default function Portfolio() {
         console.error("Failed to save volume events to cache", err);
       }
 
-      // Compute total volume: $100.00 base + all cached history + all currently active positions
-      let totalVol = 100.00;
-      for (const ev of updatedVolEvents) {
-        if (ev.key && ev.key.startsWith('recovered_') && updatedVolEvents.some(e => !e.key.startsWith('recovered_'))) {
-          continue;
-        }
-        totalVol += ev.size;
-      }
-
-      // Always add current active positions to the active volume to ensure instant UI sync
-      for (const pos of positionsList) {
-        // Only add if it's not already counted in cachedVolEvents to avoid double counting
-        const key = `recovered_${pos.id}`;
-        if (!updatedVolEvents.some(ev => ev.key === key || ev.key === `recovered_${pos.id}_0` || ev.key === `recovered_${pos.id}_1` || ev.key === `recovered_${pos.id}_2` || ev.key === `recovered_${pos.id}_3` || ev.key === `recovered_${pos.id}_4` || ev.key === `recovered_${pos.id}_5` || ev.key === `recovered_${pos.id}_6` || ev.key === `recovered_${pos.id}_7` || ev.key === `recovered_${pos.id}_8` || ev.key === `recovered_${pos.id}_9` || ev.key === `recovered_${pos.id}_10` || ev.key === `recovered_${pos.id}_11` || ev.key === `recovered_${pos.id}_12` || ev.key === `recovered_${pos.id}_13` || ev.key === `recovered_${pos.id}_14` || ev.key === `recovered_${pos.id}_15` || ev.key === `recovered_${pos.id}_16` || ev.key === `recovered_${pos.id}_17` || ev.key === `recovered_${pos.id}_18` || ev.key === `recovered_${pos.id}_19` || ev.key === `recovered_${pos.id}_20`)) {
-          totalVol += pos.size;
-        }
-      }
-
       setRealizedPnl(cumPnl);
-      setTotalVolume(totalVol);
-      setPerpVolume(totalVol);
-      
-      // 1. Volume History starting beautifully at $100.00 and climbing with each real trade
-      const dailyVolPoints = [];
-      const sortedVolEvents = [...updatedVolEvents].sort((a, b) => a.timestamp - b.timestamp);
-      
-      // Always seed active positions into history points if they aren't there
-      positionsList.forEach((pos, index) => {
-        const key = `recovered_${pos.id}`;
-        if (!sortedVolEvents.some(ev => ev.key === key)) {
-          sortedVolEvents.push({
-            key,
-            size: pos.size,
-            timestamp: Math.floor(Date.now() / 1000)
-          });
-        }
-      });
-
-      // Sort again after adding active positions
-      sortedVolEvents.sort((a, b) => a.timestamp - b.timestamp);
-
-      // Initial baseline point starts at $100.00
-      const firstVolTime = sortedVolEvents.length > 0 ? sortedVolEvents[0].timestamp - 3600 : Math.floor(Date.now() / 1000) - 86400;
-      dailyVolPoints.push({
-        time: firstVolTime,
-        value: 100.00
-      });
-
-      let currentCumVol = 0;
-      for (const ev of sortedVolEvents) {
-        currentCumVol += ev.size;
-        dailyVolPoints.push({
-          time: ev.timestamp,
-          value: 100.00 + currentCumVol
-        });
-      }
-
-      // If there are trades, add a final point up to current time
-      if (sortedVolEvents.length > 0) {
-        dailyVolPoints.push({
-          time: Math.floor(Date.now() / 1000),
-          value: 100.00 + currentCumVol
-        });
-      } else {
-        // Fallback for new wallets with zero trades: clean flat line at 100.00
-        dailyVolPoints.push({
-          time: Math.floor(Date.now() / 1000),
-          value: 100.00
-        });
-      }
-      setVolumeHistory(dailyVolPoints);
 
       // 2. REAL PnL History (Cumulative line based strictly on closed/liquidated trades)
       const dailyPnlPoints = [];
@@ -413,7 +344,7 @@ export default function Portfolio() {
     // Determine raw dataset to process
     let rawData = [];
     const isConnected = !!account;
-    const hasHistory = totalVolume > 0 || Math.abs(realizedPnl) > 0 || activePositions.length > 0;
+    const hasHistory = globalVolume > 100.00 || Math.abs(realizedPnl) > 0 || activePositions.length > 0;
 
     if (activeChartTab === 'account') {
       if (!isConnected) {
@@ -444,11 +375,11 @@ export default function Portfolio() {
     } else if (activeChartTab === 'volume') {
       if (!isConnected || !hasHistory) {
         rawData = [
-          { time: Math.floor(Date.now() / 1000) - 3600 * 24, value: 0 },
-          { time: Math.floor(Date.now() / 1000), value: 0 }
+          { time: Math.floor(Date.now() / 1000) - 3600 * 24, value: 100.00 },
+          { time: Math.floor(Date.now() / 1000), value: 100.00 }
         ];
       } else {
-        rawData = volumeHistory;
+        rawData = globalVolumeHistory;
       }
     }
 
@@ -491,7 +422,7 @@ export default function Portfolio() {
         seriesRefs.current.volume.setData(finalData);
       }
     }
-  }, [activeChartTab, equityHistory, pnlHistory, volumeHistory, totalEquity, realizedPnl, totalVolume, activePositions, usdcBalance, account]);
+  }, [activeChartTab, equityHistory, pnlHistory, globalVolumeHistory, totalEquity, realizedPnl, globalVolume, activePositions, usdcBalance, account]);
 
   // Dynamic values
   const totalMargin = activePositions.reduce((acc, pos) => acc + pos.margin, 0);
@@ -535,7 +466,7 @@ export default function Portfolio() {
             <div>
               <span className="text-xs text-gray-400 font-bold block uppercase tracking-wider">30d Volume</span>
               <span className="text-2xl font-extrabold text-white mt-1 block">
-                ${(account ? totalVolume : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${(account ? globalVolume : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
               <span className="text-xs text-gray-500 mt-1 block">Fee Tier: <b className="text-gray-300">0.01% / 0.035%</b></span>
             </div>
@@ -664,13 +595,13 @@ export default function Portfolio() {
                   <div>
                     <span className="text-[10px] text-gray-400 block font-bold">Volume</span>
                     <span className="text-base font-extrabold text-white">
-                      ${(account ? totalVolume : 0).toFixed(2)}
+                      ${(account ? globalVolume : 0).toFixed(2)}
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-gray-400 block font-bold">Perp Volume</span>
                     <span className="text-sm font-extrabold text-white">
-                      ${(account ? perpVolume : 0).toFixed(2)}
+                      ${(account ? globalVolume : 0).toFixed(2)}
                     </span>
                   </div>
                   <div>

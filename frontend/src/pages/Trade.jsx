@@ -5,7 +5,16 @@ import { createChart } from 'lightweight-charts';
 import { TrendingUp, TrendingDown, ShieldAlert, Award, Database, Wallet } from 'lucide-react';
 
 export default function Trade() {
-  const { account, contracts, addToast, connectWallet } = useWallet();
+  const { 
+    account, 
+    contracts, 
+    addToast, 
+    connectWallet, 
+    globalVolume, 
+    setGlobalVolume, 
+    globalVolumeHistory, 
+    setGlobalVolumeHistory 
+  } = useWallet();
   const [isLong, setIsLong] = useState(true);
   const [size, setSize] = useState('100');
   const [leverage, setLeverage] = useState(5);
@@ -532,6 +541,22 @@ export default function Trade() {
         console.log("Cached new volume event successfully:", size);
       } catch (volErr) {
         console.error("Failed to instantly cache trade volume:", volErr);
+      }
+
+      // Update global context states for volume and history graphs
+      try {
+        const newSize = parseFloat(size);
+        const updatedVol = globalVolume + newSize;
+        setGlobalVolume(updatedVol);
+        
+        const newPoint = {
+          time: Math.floor(Date.now() / 1000),
+          value: updatedVol
+        };
+        setGlobalVolumeHistory([...globalVolumeHistory, newPoint]);
+        console.log("Updated global volume successfully to:", updatedVol);
+      } catch (globalVolErr) {
+        console.error("Failed to update global context volume states:", globalVolErr);
       }
 
       fetchData();

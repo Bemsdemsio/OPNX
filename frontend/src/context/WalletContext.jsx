@@ -32,6 +32,59 @@ export function WalletProvider({ children }) {
   const [contracts, setContracts] = useState({});
   const [toasts, setToasts] = useState([]);
 
+  // Persistent Global Volume State
+  const [globalVolume, setGlobalVolume] = useState(() => {
+    return 100.00;
+  });
+
+  const [globalVolumeHistory, setGlobalVolumeHistory] = useState(() => {
+    return [
+      { time: Math.floor(Date.now() / 1000) - 86400, value: 100.00 },
+      { time: Math.floor(Date.now() / 1000), value: 100.00 }
+    ];
+  });
+
+  // Load account-specific volume data on mount or change
+  useEffect(() => {
+    if (account) {
+      const savedVolume = localStorage.getItem(`opnx_global_volume_${account}`);
+      if (savedVolume) {
+        setGlobalVolume(parseFloat(savedVolume));
+      } else {
+        setGlobalVolume(100.00);
+      }
+
+      const savedHistory = localStorage.getItem(`opnx_global_volume_history_${account}`);
+      if (savedHistory) {
+        try {
+          setGlobalVolumeHistory(JSON.parse(savedHistory));
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        setGlobalVolumeHistory([
+          { time: Math.floor(Date.now() / 1000) - 86400, value: 100.00 },
+          { time: Math.floor(Date.now() / 1000), value: 100.00 }
+        ]);
+      }
+    }
+  }, [account]);
+
+  // Sync to localStorage
+  const updateGlobalVolume = (newVol) => {
+    setGlobalVolume(newVol);
+    if (account) {
+      localStorage.setItem(`opnx_global_volume_${account}`, newVol.toString());
+    }
+  };
+
+  const updateGlobalVolumeHistory = (newHistory) => {
+    setGlobalVolumeHistory(newHistory);
+    if (account) {
+      localStorage.setItem(`opnx_global_volume_history_${account}`, JSON.stringify(newHistory));
+    }
+  };
+
   const addToast = (message, type = 'success') => {
     const id = Date.now() + Math.random().toString(36).substr(2, 9);
     setToasts((prev) => [...prev, { id, message, type }]);
@@ -191,7 +244,11 @@ export function WalletProvider({ children }) {
       connectWallet,
       toasts,
       addToast,
-      removeToast
+      removeToast,
+      globalVolume,
+      setGlobalVolume: updateGlobalVolume,
+      globalVolumeHistory,
+      setGlobalVolumeHistory: updateGlobalVolumeHistory
     }}>
       {children}
     </WalletContext.Provider>
