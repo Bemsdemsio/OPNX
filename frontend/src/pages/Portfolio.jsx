@@ -370,7 +370,10 @@ export default function Portfolio() {
           { time: Math.floor(Date.now() / 1000), value: 0 }
         ];
       } else {
-        rawData = pnlHistory;
+        rawData = pnlHistory.length > 0 ? pnlHistory : [
+          { time: Math.floor(Date.now() / 1000) - 3600 * 24, value: 0 },
+          { time: Math.floor(Date.now() / 1000), value: 0 }
+        ];
       }
     } else if (activeChartTab === 'volume') {
       if (!isConnected || !hasHistory) {
@@ -379,7 +382,10 @@ export default function Portfolio() {
           { time: Math.floor(Date.now() / 1000), value: 100.00 }
         ];
       } else {
-        rawData = globalVolumeHistory;
+        rawData = globalVolumeHistory.length > 0 ? globalVolumeHistory : [
+          { time: Math.floor(Date.now() / 1000) - 3600 * 24, value: 100.00 },
+          { time: Math.floor(Date.now() / 1000), value: 100.00 }
+        ];
       }
     }
 
