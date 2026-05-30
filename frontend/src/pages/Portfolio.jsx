@@ -135,18 +135,20 @@ export default function Portfolio() {
         eventMap.set(key, e);
       });
 
-      // Active Positions auto-recovery: If cache is empty, seed it with current active positions
-      if (cachedVolEvents.length === 0 && positionsList.length > 0) {
+      // Active Positions auto-recovery: Always ensure current active positions are in the volume history
+      if (positionsList.length > 0) {
         positionsList.forEach((pos, index) => {
-          const key = `recovered_${pos.id}_${index}`;
-          eventMap.set(key, {
-            key,
-            blockNumber: 0,
-            transactionHash: `recovered_tx_${pos.id}`,
-            logIndex: index,
-            size: pos.size,
-            timestamp: Math.floor(Date.now() / 1000) - (positionsList.length - index) * 60
-          });
+          const key = `recovered_${pos.id}`;
+          if (!eventMap.has(key)) {
+            eventMap.set(key, {
+              key,
+              blockNumber: 0,
+              transactionHash: `recovered_tx_${pos.id}`,
+              logIndex: index,
+              size: pos.size,
+              timestamp: Math.floor(Date.now() / 1000) - (positionsList.length - index) * 60
+            });
+          }
         });
       }
 
@@ -394,13 +396,23 @@ export default function Portfolio() {
       }
     }
 
-    // Sort to prevent lightweight-charts exception
-    dataToSet.sort((a, b) => a.time - b.time);
+    // Extremely robust filtering to completely prevent lightweight-charts exceptions
+    const validData = dataToSet.filter(item => 
+      item && 
+      item.time !== undefined && 
+      item.time !== null && 
+      !isNaN(item.time) && 
+      item.value !== undefined && 
+      item.value !== null && 
+      !isNaN(item.value)
+    );
+
+    // Sort properly by timestamp
+    validData.sort((a, b) => a.time - b.time);
 
     // Group and consolidate duplicate timestamps to prevent lightweight-charts exception
-    // For Volume: sum values. For PnL/Equity: keep the latest cumulative value.
     const groupedMap = {};
-    for (const item of dataToSet) {
+    for (const item of validData) {
       const t = item.time;
       if (groupedMap[t]) {
         if (activeChartTab === 'volume') {
@@ -414,6 +426,9 @@ export default function Portfolio() {
       }
     }
     const uniqueData = Object.values(groupedMap);
+
+    // Ensure we sort one more time after grouping
+    uniqueData.sort((a, b) => a.time - b.time);
 
     if (uniqueData.length > 0) {
       currentSeriesRef.current.setData(uniqueData);
