@@ -279,14 +279,15 @@ export default function Portfolio() {
     return () => clearInterval(interval);
   }, [contracts, account]);
 
-  // Chart setup: Initialize Chart Canvas ONCE on Mount
+  // Unified, bulletproof chart mount and update loop
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    // Clear any previous elements to avoid duplicates and canvas crash
+    // 1. Clean container completely to prevent double rendering & memory leaks
     chartContainerRef.current.innerHTML = '';
 
-    chartRef.current = createChart(chartContainerRef.current, {
+    // 2. Build the chart configuration from scratch
+    const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { color: '#151515' },
         textColor: '#9ca3af',
@@ -309,46 +310,29 @@ export default function Portfolio() {
       height: 280,
     });
 
+    chartRef.current = chart;
+
     const handleResize = () => {
-      if (chartRef.current && chartContainerRef.current) {
-        chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
+      if (chart && chartContainerRef.current) {
+        chart.applyOptions({ width: chartContainerRef.current.clientWidth });
       }
     };
-
     window.addEventListener('resize', handleResize);
 
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      if (chartRef.current) {
-        chartRef.current.remove();
-        chartRef.current = null;
-      }
-    };
-  }, []);
-
-  // Chart setup & Tab Switching: Update Series Data
-  useEffect(() => {
-    if (!chartRef.current) return;
-
-    // Remove previous series if it exists
-    if (currentSeriesRef.current) {
-      try {
-        chartRef.current.removeSeries(currentSeriesRef.current);
-      } catch (e) {}
-      currentSeriesRef.current = null;
-    }
-
+    // 3. Formulate dataset based on current active tab
     let dataToSet = [];
     const isConnected = !!account;
     const hasHistory = totalVolume > 0 || Math.abs(realizedPnl) > 0 || activePositions.length > 0;
-    
+    let series = null;
+
     if (activeChartTab === 'account') {
-      currentSeriesRef.current = chartRef.current.addAreaSeries({
+      series = chart.addAreaSeries({
         lineColor: '#00ff88',
         topColor: 'rgba(0, 255, 136, 0.3)',
         bottomColor: 'rgba(0, 255, 136, 0.0)',
         lineWidth: 2,
       });
+
       if (!isConnected) {
         dataToSet = [
           { time: Math.floor(Date.now() / 1000) - 3600, value: 0 },
@@ -366,13 +350,13 @@ export default function Portfolio() {
         ];
       }
     } else if (activeChartTab === 'pnl') {
-      currentSeriesRef.current = chartRef.current.addAreaSeries({
+      series = chart.addAreaSeries({
         lineColor: realizedPnl >= 0 ? '#00ff88' : '#ff4444',
         topColor: realizedPnl >= 0 ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 68, 68, 0.3)',
         bottomColor: 'rgba(0, 0, 0, 0)',
         lineWidth: 2,
       });
-      
+
       if (!isConnected || !hasHistory) {
         dataToSet = [
           { time: Math.floor(Date.now() / 1000) - 3600 * 24, value: 0 },
@@ -382,7 +366,7 @@ export default function Portfolio() {
         dataToSet = pnlHistory;
       }
     } else if (activeChartTab === 'volume') {
-      currentSeriesRef.current = chartRef.current.addAreaSeries({
+      series = chart.addAreaSeries({
         lineColor: '#3b82f6',
         topColor: 'rgba(59, 130, 246, 0.3)',
         bottomColor: 'rgba(59, 130, 246, 0.0)',
@@ -399,7 +383,7 @@ export default function Portfolio() {
       }
     }
 
-    // Extremely robust filtering to completely prevent lightweight-charts exceptions
+    // 4. Robust filtering of coordinate points to block NaN or undefined timestamps
     const validData = dataToSet.filter(item => 
       item && 
       item.time !== undefined && 
@@ -410,10 +394,8 @@ export default function Portfolio() {
       !isNaN(item.value)
     );
 
-    // Sort properly by timestamp
+    // 5. Consolidate duplicates & sort chronologically
     validData.sort((a, b) => a.time - b.time);
-
-    // Group and consolidate duplicate timestamps to prevent lightweight-charts exception
     const groupedMap = {};
     for (const item of validData) {
       const t = item.time;
@@ -421,7 +403,6 @@ export default function Portfolio() {
         if (activeChartTab === 'volume') {
           groupedMap[t].value += item.value;
         } else {
-          // Keep the latest PnL/Equity state
           groupedMap[t] = { ...item };
         }
       } else {
@@ -429,14 +410,20 @@ export default function Portfolio() {
       }
     }
     const uniqueData = Object.values(groupedMap);
-
-    // Ensure we sort one more time after grouping
     uniqueData.sort((a, b) => a.time - b.time);
 
-    if (uniqueData.length > 0) {
-      currentSeriesRef.current.setData(uniqueData);
+    // 6. Set data safely to the active series
+    if (series && uniqueData.length > 0) {
+      series.setData(uniqueData);
     }
-  }, [activeChartTab, equityHistory, pnlHistory, volumeHistory, totalEquity, realizedPnl, totalVolume, activePositions, usdcBalance]);
+
+    // 7. Cleanup callback
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chart.remove();
+      chartRef.current = null;
+    };
+  }, [activeChartTab, equityHistory, pnlHistory, volumeHistory, totalEquity, realizedPnl, totalVolume, activePositions, usdcBalance, account]);
 
   // Dynamic values
   const totalMargin = activePositions.reduce((acc, pos) => acc + pos.margin, 0);
