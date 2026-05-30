@@ -279,14 +279,21 @@ export default function Portfolio() {
     return () => clearInterval(interval);
   }, [contracts, account]);
 
-  // Unified, bulletproof chart mount and update loop
+  // Bulletproof state references to keep chart updates clean
+  const chartInstance = useRef(null);
+  const seriesRefs = useRef({
+    account: null,
+    pnl: null,
+    volume: null
+  });
+
+  // 1. Initialize Chart Canvas & Series ONCE on Mount
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    // 1. Clean container completely to prevent double rendering & memory leaks
+    // Clear any previous elements to avoid duplicates and canvas crash
     chartContainerRef.current.innerHTML = '';
 
-    // 2. Build the chart configuration from scratch
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { color: '#151515' },
@@ -310,7 +317,32 @@ export default function Portfolio() {
       height: 280,
     });
 
-    chartRef.current = chart;
+    chartInstance.current = chart;
+
+    // Initialize all 3 series once on start
+    seriesRefs.current.account = chart.addAreaSeries({
+      lineColor: '#00ff88',
+      topColor: 'rgba(0, 255, 136, 0.3)',
+      bottomColor: 'rgba(0, 255, 136, 0.0)',
+      lineWidth: 2,
+      visible: activeChartTab === 'account'
+    });
+
+    seriesRefs.current.pnl = chart.addAreaSeries({
+      lineColor: '#00ff88',
+      topColor: 'rgba(0, 255, 136, 0.3)',
+      bottomColor: 'rgba(0, 255, 136, 0.0)',
+      lineWidth: 2,
+      visible: activeChartTab === 'pnl'
+    });
+
+    seriesRefs.current.volume = chart.addAreaSeries({
+      lineColor: '#3b82f6',
+      topColor: 'rgba(59, 130, 246, 0.3)',
+      bottomColor: 'rgba(59, 130, 246, 0.0)',
+      lineWidth: 2,
+      visible: activeChartTab === 'volume'
+    });
 
     const handleResize = () => {
       if (chart && chartContainerRef.current) {
@@ -319,72 +351,79 @@ export default function Portfolio() {
     };
     window.addEventListener('resize', handleResize);
 
-    // 3. Formulate dataset based on current active tab
-    let dataToSet = [];
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chart.remove();
+      chartInstance.current = null;
+      seriesRefs.current = { account: null, pnl: null, volume: null };
+    };
+  }, []);
+
+  // 2. Light and safe data update effect: Updates values and toggles visibility smoothly
+  useEffect(() => {
+    const chart = chartInstance.current;
+    if (!chart) return;
+
+    // Toggle series visibility based on active tab
+    if (seriesRefs.current.account) {
+      seriesRefs.current.account.applyOptions({ visible: activeChartTab === 'account' });
+    }
+    if (seriesRefs.current.pnl) {
+      // Dynamic line color for PnL based on profit or loss
+      seriesRefs.current.pnl.applyOptions({ 
+        visible: activeChartTab === 'pnl',
+        lineColor: realizedPnl >= 0 ? '#00ff88' : '#ff4444',
+        topColor: realizedPnl >= 0 ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 68, 68, 0.3)',
+      });
+    }
+    if (seriesRefs.current.volume) {
+      seriesRefs.current.volume.applyOptions({ visible: activeChartTab === 'volume' });
+    }
+
+    // Determine raw dataset to process
+    let rawData = [];
     const isConnected = !!account;
     const hasHistory = totalVolume > 0 || Math.abs(realizedPnl) > 0 || activePositions.length > 0;
-    let series = null;
 
     if (activeChartTab === 'account') {
-      series = chart.addAreaSeries({
-        lineColor: '#00ff88',
-        topColor: 'rgba(0, 255, 136, 0.3)',
-        bottomColor: 'rgba(0, 255, 136, 0.0)',
-        lineWidth: 2,
-      });
-
       if (!isConnected) {
-        dataToSet = [
+        rawData = [
           { time: Math.floor(Date.now() / 1000) - 3600, value: 0 },
           { time: Math.floor(Date.now() / 1000), value: 0 }
         ];
       } else if (!hasHistory) {
-        dataToSet = [
+        rawData = [
           { time: Math.floor(Date.now() / 1000) - 3600 * 24, value: totalEquity },
           { time: Math.floor(Date.now() / 1000), value: totalEquity }
         ];
       } else {
-        dataToSet = equityHistory.length > 0 ? equityHistory : [
-          { time: Math.floor(Date.now() / 1000) - 3600, value: totalEquity * 0.98 },
+        rawData = equityHistory.length > 0 ? equityHistory : [
+          { time: Math.floor(Date.now() / 1000) - 3600, value: totalEquity },
           { time: Math.floor(Date.now() / 1000), value: totalEquity }
         ];
       }
     } else if (activeChartTab === 'pnl') {
-      series = chart.addAreaSeries({
-        lineColor: realizedPnl >= 0 ? '#00ff88' : '#ff4444',
-        topColor: realizedPnl >= 0 ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 68, 68, 0.3)',
-        bottomColor: 'rgba(0, 0, 0, 0)',
-        lineWidth: 2,
-      });
-
       if (!isConnected || !hasHistory) {
-        dataToSet = [
+        rawData = [
           { time: Math.floor(Date.now() / 1000) - 3600 * 24, value: 0 },
           { time: Math.floor(Date.now() / 1000), value: 0 }
         ];
       } else {
-        dataToSet = pnlHistory;
+        rawData = pnlHistory;
       }
     } else if (activeChartTab === 'volume') {
-      series = chart.addAreaSeries({
-        lineColor: '#3b82f6',
-        topColor: 'rgba(59, 130, 246, 0.3)',
-        bottomColor: 'rgba(59, 130, 246, 0.0)',
-        lineWidth: 2,
-      });
-
       if (!isConnected || !hasHistory) {
-        dataToSet = [
+        rawData = [
           { time: Math.floor(Date.now() / 1000) - 3600 * 24, value: 0 },
           { time: Math.floor(Date.now() / 1000), value: 0 }
         ];
       } else {
-        dataToSet = volumeHistory;
+        rawData = volumeHistory;
       }
     }
 
-    // 4. Robust filtering of coordinate points to block NaN or undefined timestamps
-    const validData = dataToSet.filter(item => 
+    // Clean and validate coordinates to avoid lightweight-charts crash
+    const validPoints = rawData.filter(item => 
       item && 
       item.time !== undefined && 
       item.time !== null && 
@@ -394,35 +433,34 @@ export default function Portfolio() {
       !isNaN(item.value)
     );
 
-    // 5. Consolidate duplicates & sort chronologically
-    validData.sort((a, b) => a.time - b.time);
-    const groupedMap = {};
-    for (const item of validData) {
-      const t = item.time;
-      if (groupedMap[t]) {
+    // Consolidate identical timestamps
+    validPoints.sort((a, b) => a.time - b.time);
+    const consolidated = {};
+    for (const pt of validPoints) {
+      const t = pt.time;
+      if (consolidated[t]) {
         if (activeChartTab === 'volume') {
-          groupedMap[t].value += item.value;
+          consolidated[t].value += pt.value;
         } else {
-          groupedMap[t] = { ...item };
+          consolidated[t] = { ...pt };
         }
       } else {
-        groupedMap[t] = { ...item };
+        consolidated[t] = { ...pt };
       }
     }
-    const uniqueData = Object.values(groupedMap);
-    uniqueData.sort((a, b) => a.time - b.time);
+    const finalData = Object.values(consolidated);
+    finalData.sort((a, b) => a.time - b.time);
 
-    // 6. Set data safely to the active series
-    if (series && uniqueData.length > 0) {
-      series.setData(uniqueData);
+    // Apply data safely to active series
+    if (finalData.length > 0) {
+      if (activeChartTab === 'account' && seriesRefs.current.account) {
+        seriesRefs.current.account.setData(finalData);
+      } else if (activeChartTab === 'pnl' && seriesRefs.current.pnl) {
+        seriesRefs.current.pnl.setData(finalData);
+      } else if (activeChartTab === 'volume' && seriesRefs.current.volume) {
+        seriesRefs.current.volume.setData(finalData);
+      }
     }
-
-    // 7. Cleanup callback
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      chart.remove();
-      chartRef.current = null;
-    };
   }, [activeChartTab, equityHistory, pnlHistory, volumeHistory, totalEquity, realizedPnl, totalVolume, activePositions, usdcBalance, account]);
 
   // Dynamic values
